@@ -2,11 +2,12 @@
  * This is the base config for vite.
  * When building, the adapter config is used which loads this file and extends it.
  */
-import { defineConfig, type UserConfig } from "vite";
-import { qwikVite } from "@builder.io/qwik/optimizer";
-import { qwikCity } from "@builder.io/qwik-city/vite";
+import { defineConfig, loadEnv, type UserConfig } from "vite";
+import { qwikVite } from "@qwik.dev/core/optimizer";
+import { qwikRouter } from "@qwik.dev/router/vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 import pkg from "./package.json";
+import istanbul from "vite-plugin-istanbul";
 
 type PkgDep = Record<string, string>;
 const { dependencies = {}, devDependencies = {} } = pkg as any as {
@@ -20,8 +21,46 @@ errorOnDuplicatesPkgDeps(devDependencies, dependencies);
  * Note that Vite normally starts from `index.html` but the qwikCity plugin makes start at `src/entry.ssr.tsx` instead.
  */
 export default defineConfig(({ command, mode }): UserConfig => {
+  process.env = {
+    ...process.env,
+    ...loadEnv(mode, process.cwd()),
+  };
+
   return {
-    plugins: [qwikCity(), qwikVite(), tsconfigPaths()],
+    plugins: [
+      istanbul({
+        include: "src/**/*.{js,jsx,ts,tsx}", // Adjust if needed
+        exclude: [
+          "node_modules",
+          "test/",
+          "**/*.test.{ts,tsx}",
+          "**/*.cy.{ts,tsx}",
+          "dist",
+        ],
+        extension: [".js", ".cjs", ".mjs", ".ts", ".tsx", ".jsx"],
+        cypress: true, // Enable for Cypress tests
+        requireEnv: false, // Doesn't works with Vite because vite will not load CYPRESS_COVERAGE from .env[.mode] because it does not start with VITE
+      }),
+
+      // istanbulPlugin({
+      //   include: 'src/*',
+      //   exclude: ['node_modules', 'test/', "**/*.cy.js", "dist"],
+      //   extension: ['.js', '.cjs', '.mjs', '.ts', '.tsx', '.jsx', '.vue'],
+      //   cypress: true,
+      //   // requireEnv: true, // Never works with Vite because vite will not load CYPRESS_COVERAGE from .env[.mode] because it does not start with VITE
+      // }),
+      tsconfigPaths(),
+      qwikVite(),
+      qwikRouter(),
+    ],
+    build: {
+      sourcemap: true, // Ensure source maps are generated
+      rollupOptions: {
+        output: {
+          sourcemapBaseUrl: "", // Set the sourceRoot here
+        },
+      },
+    },
     // This tells Vite which dependencies to pre-build in dev mode.
     optimizeDeps: {
       // Put problematic deps that break bundling here, mostly those with binaries.
@@ -70,18 +109,18 @@ export default defineConfig(({ command, mode }): UserConfig => {
  */
 function errorOnDuplicatesPkgDeps(
   devDependencies: PkgDep,
-  dependencies: PkgDep,
+  dependencies: PkgDep
 ) {
   let msg = "";
   // Create an array 'duplicateDeps' by filtering devDependencies.
   // If a dependency also exists in dependencies, it is considered a duplicate.
   const duplicateDeps = Object.keys(devDependencies).filter(
-    (dep) => dependencies[dep],
+    (dep) => dependencies[dep]
   );
 
   // include any known qwik packages
   const qwikPkg = Object.keys(dependencies).filter((value) =>
-    /qwik/i.test(value),
+    /qwik/i.test(value)
   );
 
   // any errors for missing "qwik-city-plan"
